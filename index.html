@@ -63,8 +63,15 @@
       if (!targetOK) return showError('Error: target.mind file not found in assets folder.');
       if (!modelOK) return showError('Error: model.glb file not found in assets folder.');
 
+      // Use fallback for MindAR global
+      const MindAR = window.MINDAR?.IMAGE || window.MINDARIMAGE;
+      if (!MindAR) {
+        showError('MindAR library not loaded properly.');
+        return;
+      }
+
       try {
-        const mindarThree = new window.MINDAR.IMAGE.Three({
+        const mindarThree = new MindAR.Three({
           container: document.getElementById('ar-container'),
           imageTargetSrc: 'assets/target.mind',
         });
@@ -78,11 +85,11 @@
         directionalLight.position.set(0, 0, 1);
         scene.add(directionalLight);
 
-        // Anchor for tracked image
+        // Anchor and model group
         const anchor = mindarThree.addAnchor(0);
         const root = anchor.group;
 
-        // Load the GLB model
+        // Load GLB model
         const loader = new THREE.GLTFLoader();
         loader.load(
           'assets/model.glb',
@@ -101,7 +108,7 @@
           }
         );
 
-        // Start MindAR engine
+        // Start AR engine
         await mindarThree.start();
         console.log('MindAR started');
 
@@ -110,7 +117,7 @@
           renderer.render(scene, camera);
         });
 
-        // Handle resize
+        // Resize support
         window.addEventListener('resize', () => {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
