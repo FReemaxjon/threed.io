@@ -2,39 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebAR Experience</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>New WebAR Experience</title>
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-    }
-    #ar-container {
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-    }
-    canvas {
-      display: block;
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
+    body { margin: 0; overflow: hidden; }
+    #ar-container { width: 100vw; height: 100vh; position: relative; }
     #error-message {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(255, 0, 0, 0.8);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 5px;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: red;
       font-family: sans-serif;
       z-index: 100;
-      display: none;
-    }
-    #error-message.show {
-      display: block;
     }
   </style>
 </head>
@@ -42,26 +21,24 @@
   <div id="ar-container"></div>
   <div id="error-message"></div>
 
-  <!-- Load Three.js and MindAR -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.178.0/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.178.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+  <!-- Load Three.js, GLTFLoader, and MindAR -->
+  <script src="https://unpkg.com/three@0.178.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.178.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
+  <!-- MindAR fallback shim -->
+  <script>
+    if (!window.MINDAR?.IMAGE && window.MINDARIMAGE) {
+      window.MINDAR = window.MINDAR || {};
+      window.MINDAR.IMAGE = window.MINDARIMAGE;
+    }
+  </script>
 
   <script>
-    const DEBUG = true;
-    function log(message) {
-      if (DEBUG) console.log(message);
-    }
-
     function showError(message) {
       const errorDiv = document.getElementById('error-message');
       errorDiv.innerText = message;
-      errorDiv.classList.add('show');
       console.error(message);
-      setTimeout(() => {
-        errorDiv.classList.remove('show');
-        errorDiv.innerText = '';
-      }, 5000);
     }
 
     async function checkFileExists(url) {
@@ -74,19 +51,9 @@
     }
 
     async function startAR() {
-      // Check if libraries are loaded
-      if (!window.THREE) {
-        showError('Three.js library is not loaded.');
-        return;
-      }
-      if (!window.MINDAR || !window.MINDAR.IMAGE) {
-        showError('MindAR library is not loaded or incompatible.');
-        return;
-      }
-
-      // Check asset files
       const targetOK = await checkFileExists('assets/target.mind');
       const modelOK = await checkFileExists('assets/model.glb');
+
       if (!targetOK) return showError('Error: target.mind file not found in assets folder.');
       if (!modelOK) return showError('Error: model.glb file not found in assets folder.');
 
@@ -98,72 +65,31 @@
 
         const { renderer, scene, camera } = mindarThree;
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(0, 0, 1);
-        scene.add(directionalLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const light = new THREE.DirectionalLight(0xffffff, 0.8);
+        light.position.set(1, 1, 1);
+        scene.add(light);
 
-        // Anchor
         const anchor = mindarThree.addAnchor(0);
         const root = anchor.group;
 
-        // Load GLB model
         const loader = new THREE.GLTFLoader();
         loader.load(
           'assets/model.glb',
           (gltf) => {
             const model = gltf.scene;
-            model.scale.set(0.1, 0.1, 0.1); // Consider dynamic scaling
-            model.position.set(0, 0, 0);
+            model.scale.set(0.1, 0.1, 0.1);
             root.add(model);
-            log('Model loaded successfully');
+            console.log('Model loaded');
           },
-          (xhr) => {
-            log(`Model loading: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
-          },
-          (error) => {
-            showError('Error loading GLB model: ' + error.message);
-          }
+          undefined,
+          (error) => showError('Failed to load model: ' + error.message)
         );
 
-        // Optimize render loop with target detection
-        anchor.onTargetFound = () => {
-          renderer.setAnimationLoop(() => {
-            renderer.render(scene, camera);
-          });
-        };
-        anchor.onTargetLost = () => {
-          renderer.setAnimationLoop(null);
-        };
-
-        // Start AR experience
         await mindarThree.start();
-        log('MindAR started');
+        renderer.setAnimationLoop(() => renderer.render(scene, camera));
 
-        // Handle resize
-        const onResize = () => {
+        window.addEventListener('resize', () => {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
-          renderer.setSize(window.innerWidth, window.innerHeight);
-        };
-        window.addEventListener('resize', onResize);
-
-        // Cleanup function (call when stopping AR)
-        window.stopAR = () => {
-          renderer.setAnimationLoop(null);
-          window.removeEventListener('resize', onResize);
-          mindarThree.stop();
-        };
-
-      } catch (err) {
-        showError('Error starting MindAR: ' + err.message);
-      }
-    }
-
-    // Start AR when page loads
-    window.addEventListener('load', startAR);
-  </script>
-</body>
-</html>
+          renderer.setSize(window.innerW
