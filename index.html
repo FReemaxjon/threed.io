@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WebAR Experience</title>
   <style>
     body {
@@ -21,12 +21,20 @@
       left: 0;
     }
     #error-message {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      color: red;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 0, 0, 0.8);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
       font-family: sans-serif;
       z-index: 100;
+      display: none;
+    }
+    #error-message.show {
+      display: block;
     }
   </style>
 </head>
@@ -36,21 +44,24 @@
 
   <!-- Load Three.js and MindAR -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.167.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
-  <script>
-    // Shim for MindAR global fallback
-    if (!window.MINDAR || !window.MINDAR.IMAGE) {
-      window.MINDAR = window.MINDAR || {};
-      window.MINDAR.IMAGE = window.MINDARIMAGE;
-    }
-  </script>
 
   <script>
+    const DEBUG = true;
+    function log(message) {
+      if (DEBUG) console.log(message);
+    }
+
     function showError(message) {
       const errorDiv = document.getElementById('error-message');
       errorDiv.innerText = message;
+      errorDiv.classList.add('show');
       console.error(message);
+      setTimeout(() => {
+        errorDiv.classList.remove('show');
+        errorDiv.innerText = '';
+      }, 5000);
     }
 
     async function checkFileExists(url) {
@@ -63,9 +74,19 @@
     }
 
     async function startAR() {
+      // Check if libraries are loaded
+      if (!window.THREE) {
+        showError('Three.js library is not loaded.');
+        return;
+      }
+      if (!window.MINDAR || !window.MINDAR.IMAGE) {
+        showError('MindAR library is not loaded or incompatible.');
+        return;
+      }
+
+      // Check asset files
       const targetOK = await checkFileExists('assets/target.mind');
       const modelOK = await checkFileExists('assets/model.glb');
-
       if (!targetOK) return showError('Error: target.mind file not found in assets folder.');
       if (!modelOK) return showError('Error: model.glb file not found in assets folder.');
 
@@ -94,34 +115,47 @@
           'assets/model.glb',
           (gltf) => {
             const model = gltf.scene;
-            model.scale.set(0.1, 0.1, 0.1);
+            model.scale.set(0.1, 0.1, 0.1); // Consider dynamic scaling
             model.position.set(0, 0, 0);
             root.add(model);
-            console.log('Model loaded successfully');
+            log('Model loaded successfully');
           },
           (xhr) => {
-            console.log(`Model loading: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
+            log(`Model loading: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
           },
           (error) => {
             showError('Error loading GLB model: ' + error.message);
           }
         );
 
+        // Optimize render loop with target detection
+        anchor.onTargetFound = () => {
+          renderer.setAnimationLoop(() => {
+            renderer.render(scene, camera);
+          });
+        };
+        anchor.onTargetLost = () => {
+          renderer.setAnimationLoop(null);
+        };
+
         // Start AR experience
         await mindarThree.start();
-        console.log('MindAR started');
-
-        // Render loop
-        renderer.setAnimationLoop(() => {
-          renderer.render(scene, camera);
-        });
+        log('MindAR started');
 
         // Handle resize
-        window.addEventListener('resize', () => {
+        const onResize = () => {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
           renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        };
+        window.addEventListener('resize', onResize);
+
+        // Cleanup function (call when stopping AR)
+        window.stopAR = () => {
+          renderer.setAnimationLoop(null);
+          window.removeEventListener('resize', onResize);
+          mindarThree.stop();
+        };
 
       } catch (err) {
         showError('Error starting MindAR: ' + err.message);
