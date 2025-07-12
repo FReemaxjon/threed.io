@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>WebAR Experience</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #ar-container { width: 100vw; height: 100vh; }
+    #error-message { position: absolute; top: 10px; left: 10px; color: red; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="ar-container"></div>
+  <div id="error-message"></div>
+
+  <!-- Load Three.js and MindAR -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.167.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
+  <script>
+    function showError(message) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.innerText = message;
+      console.error(message);
+    }
+
+    async function checkFileExists(url) {
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    async function startAR() {
+      // Check if required files exist
+      const targetOK = await checkFileExists('assets/target.mind');
+      const modelOK = await checkFileExists('assets/model.glb');
+
+      if (!targetOK) return showError('Error: target.mind file not found in assets folder.');
+      if (!modelOK) return showError('Error: model.glb file not found in assets folder.');
+
+      try {
+        // Initialize MindAR
+        const mindarThree = new window.MINDAR.IMAGE.Three({
+          container: document.getElementById('ar-container'),
+          imageTargetSrc: 'assets/target.mind',
+        });
+
+        const { renderer, scene, camera } = mindarThree;
+
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(0, 0, 1);
+        scene.add(directionalLight);
+
+        // Anchor and root node for the model
+        const anchor = mindarThree.addAnchor(0);
+        const root = anchor.group;
+
+        // Load GLB model
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+          'assets/model.glb',
+          (gltf) => {
+            const model = gltf.scene;
+            model.scale.set(0.1, 0.1, 0.1);
+            model.position.set(0, 0, 0);
+            root.add(model);
+            console.log('Model loaded successfully');
+          },
+          (xhr) => {
+            console.log(`Model loading: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
+          },
+          (error) => {
+            showError('Error loading GLB model: ' + error.message);
+          }
+        );
+
+        // Start AR
+        await mindarThree.start();
+        console.log('MindAR started');
+
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+      } catch (err) {
+        showError('Error starting MindAR: ' + err.message);
+      }
+    }
+
+    // Check for WebGL and camera
+    if (!THREE.WEBGL.isWebGLAvailable?.()) {
+      showError('WebGL not supported in this browser.');
+    } else {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(() => startAR())
+        .catch((err) => {
+          showError('Camera access denied or unavailable: ' + err.message);
+        });
+    }
+  </script>
+</body>
+</html>
