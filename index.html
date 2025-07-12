@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>WebAR grok Experience</title>
+  <title>WebAR Experience</title>
   <style>
     body { margin: 0; overflow: hidden; }
     #ar-container { width: 100vw; height: 100vh; position: relative; }
@@ -24,14 +24,20 @@
   <!-- Load Three.js, GLTFLoader, and MindAR -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.126.0/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.3.0/dist/mindar-image-three.prod.js"></script>
 
-  <!-- MindAR fallback shim -->
+  <!-- MindAR fallback shim and debug -->
   <script>
-    if (!window.MINDAR?.IMAGE && window.MINDARIMAGE) {
-      window.MINDAR = window.MINDAR || {};
-      window.MINDAR.IMAGE = window.MINDARIMAGE;
-    }
+    window.addEventListener('load', () => {
+      if (!window.MINDARIMAGE && !window.MINDAR?.IMAGE) {
+        console.error('MindAR namespace debug: MINDARIMAGE:', window.MINDARIMAGE, 'MINDAR.IMAGE:', window.MINDAR?.IMAGE);
+      }
+      if (!window.MINDAR?.IMAGE && window.MINDARIMAGE) {
+        window.MINDAR = window.MINDAR || {};
+        window.MINDAR.IMAGE = window.MINDARIMAGE;
+        console.log('MindAR shim applied: MINDAR.IMAGE set');
+      }
+    });
   </script>
 
   <script>
@@ -51,12 +57,24 @@
     }
 
     async function startAR() {
-      // Check for WebAR compatibility
-      if (!window.MINDAR?.IMAGE) {
-        return showError('Error: MindAR library not loaded correctly.');
+      // Check secure context
+      if (!window.isSecureContext) {
+        return showError('Error: WebAR requires a secure context (HTTPS). Please serve the page over HTTPS.');
       }
 
-      // Check for local assets
+      // Check WebGL support
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) {
+        return showError('Error: WebGL is not supported by this browser.');
+      }
+
+      // Check MindAR library
+      if (!window.MINDAR?.IMAGE) {
+        return showError('Error: MindAR library not loaded correctly. Check console for details.');
+      }
+
+      // Check local assets
       const targetOK = await checkFileExists('assets/target.mind');
       const modelOK = await checkFileExists('assets/model.glb');
 
