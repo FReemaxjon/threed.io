@@ -37,8 +37,8 @@
 
     async function startAR() {
       // Check if required files exist
-      const targetOK = await checkFileExists('assets/target.mind');
-      const modelOK = await checkFileExists('assets/model.glb');
+      const targetOK = await checkFileExists('./assets/target.mind');
+      const modelOK = await checkFileExists('./assets/model.glb');
 
       if (!targetOK) return showError('Error: target.mind file not found in assets folder.');
       if (!modelOK) return showError('Error: model.glb file not found in assets folder.');
@@ -47,7 +47,7 @@
         // Initialize MindAR
         const mindarThree = new window.MINDAR.IMAGE.Three({
           container: document.getElementById('ar-container'),
-          imageTargetSrc: 'assets/target.mind',
+          imageTargetSrc: './assets/target.mind',
         });
 
         const { renderer, scene, camera } = mindarThree;
@@ -66,7 +66,7 @@
         // Load GLB model
         const loader = new THREE.GLTFLoader();
         loader.load(
-          'assets/model.glb',
+          './assets/model.glb',
           (gltf) => {
             const model = gltf.scene;
             model.scale.set(0.1, 0.1, 0.1);
